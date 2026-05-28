@@ -1,0 +1,190 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  avatar        String?
+  createdAt     DateTime  @default(now())
+  lastLogin     DateTime  @default(now())
+  scanCount     Int       @default(0)
+  subscription  Subscription @default(FREE)
+  sessions      Session[]
+  scans         Scan[]
+  favorites     Favorite[]
+  notes         ScanNote[]
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token        String   @unique
+  fingerprint  String?
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+  lastActivity DateTime @default(now())
+  expiresAt    DateTime
+  isValid      Boolean  @default(true)
+
+  @@index([token])
+  @@index([userId])
+}
+
+model Scan {
+  id           String   @id @default(cuid())
+  userId       String?
+  user         User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  domain       String
+  subdomainCount Int
+  status       ScanStatus @default(COMPLETED)
+  stats        Json
+  duration     Int
+  createdAt    DateTime @default(now())
+  completedAt  DateTime?
+  source       String? @default("web")
+  isFavorite   Boolean  @default(false)
+  tags         String[]
+  notes        String?
+
+  results      ScanResult[]
+
+  @@index([userId])
+  @@index([domain])
+  @@index([createdAt])
+}
+
+model ScanResult {
+  id             String      @id @default(cuid())
+  scanId         String
+  scan           Scan        @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  subdomain      String
+  status         Int?
+  alive          Boolean
+  responseTime   Int
+  title          String
+  redirectUrl    String?
+  redirectChain  String[]
+  server         String
+  ipAddress      String
+  cloudflare     Boolean
+  waf            String[]
+  country        String
+  asn            String
+  ssl            Boolean
+  sslInfo        Json?
+  riskScore      Int
+  riskLevel      RiskLevel
+  techStack      String[]
+  dnsRecords     Json
+  securityHeaders Json
+  source         String
+
+  @@index([scanId])
+  @@index([subdomain])
+  @@index([cloudflare])
+  @@index([riskLevel])
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  domain    String
+  scanId    String?
+  createdAt DateTime @default(now())
+
+  @@unique([userId, domain])
+  @@index([userId])
+}
+
+model ScanNote {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scanId    String?
+  domain    String
+  note      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([scanId])
+}
+
+model AbuseLog {
+  id          String   @id @default(cuid())
+  sessionId   String?
+  fingerprint String
+  ipAddress   String?
+  reason      String
+  timestamp   DateTime @default(now())
+  blockedUntil DateTime?
+  resolved    Boolean  @default(false)
+
+  @@index([fingerprint])
+  @@index([ipAddress])
+  @@index([timestamp])
+}
+
+model APILog {
+  id          String   @id @default(cuid())
+  sessionId   String?
+  endpoint    String
+  method      String
+  statusCode  Int
+  duration    Int
+  requestBody Json?
+  timestamp   DateTime @default(now())
+
+  @@index([sessionId])
+  @@index([endpoint])
+  @@index([timestamp])
+}
+
+model Monitoring {
+  id                    String   @id @default(cuid())
+  timestamp             DateTime @default(now())
+  totalScans            Int      @default(0)
+  successfulScans       Int      @default(0)
+  failedScans           Int      @default(0)
+  averageScanTime       Int      @default(0)
+  activeSessions        Int      @default(0)
+  blockedIPs            Int      @default(0)
+  rateLimitHits         Int      @default(0)
+  sourceHealth          Json?
+
+  @@index([timestamp])
+}
+
+enum Subscription {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum ScanStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
