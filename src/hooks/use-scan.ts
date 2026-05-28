@@ -69,6 +69,12 @@ export function useScan(): UseScanReturn {
       });
 
       try {
+        // Validate domain format before making request
+        const hasDot = domain.includes('.');
+        if (!hasDot) {
+          throw new Error('Domain must have an extension (e.g., .com, .net, .org)');
+        }
+
         // Ensure session exists before scanning
         addScanLog({
           timestamp: new Date().toISOString(),

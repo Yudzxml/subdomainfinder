@@ -214,7 +214,16 @@ async function scanSubdomain(
     riskLevel: 'low',
     techStack: [],
     dnsRecords: {},
-    securityHeaders: {} as SecurityHeaders,
+    securityHeaders: {
+      'Content-Security-Policy': { present: false, value: '', status: 'missing' },
+      'Strict-Transport-Security': { present: false, value: '', status: 'missing', maxAge: 0, includeSubDomains: false, preload: false },
+      'X-Frame-Options': { present: false, value: '', status: 'missing' },
+      'X-XSS-Protection': { present: false, value: '', status: 'missing' },
+      'Referrer-Policy': { present: false, value: '', status: 'missing' },
+      'Permissions-Policy': { present: false, value: '', status: 'missing' },
+      'X-Content-Type-Options': { present: false, value: '', status: 'missing' },
+      'X-Robots-Tag': { present: false, value: '', status: 'missing' },
+    } as SecurityHeaders,
     source: 'Passive',
     lastChecked: new Date().toISOString(),
   };
@@ -440,21 +449,23 @@ function calculateRiskScore(result: SubdomainResult, allResults: SubdomainResult
     score += 20;
   }
 
-  // Security headers
+  // Security headers - Add null check
   const headers = result.securityHeaders;
-  let missingHeaders = 0;
-  if (!headers['Content-Security-Policy'].present) missingHeaders++;
-  if (!headers['Strict-Transport-Security'].present) missingHeaders++;
-  if (!headers['X-Frame-Options'].present) missingHeaders++;
-  if (!headers['X-Content-Type-Options'].present) missingHeaders++;
+  if (headers && typeof headers === 'object') {
+    let missingHeaders = 0;
+    if (headers['Content-Security-Policy'] && !headers['Content-Security-Policy'].present) missingHeaders++;
+    if (headers['Strict-Transport-Security'] && !headers['Strict-Transport-Security'].present) missingHeaders++;
+    if (headers['X-Frame-Options'] && !headers['X-Frame-Options'].present) missingHeaders++;
+    if (headers['X-Content-Type-Options'] && !headers['X-Content-Type-Options'].present) missingHeaders++;
 
-  score += missingHeaders * 5;
+    score += missingHeaders * 5;
+  }
 
-  // SSL issues
+  // SSL issues - Add null check
   if (result.sslInfo) {
     if (!result.sslInfo.active) score += 15;
     if (result.sslInfo.isExpired) score += 30;
-    if (result.sslInfo.warnings.length > 0) score += 10;
+    if (result.sslInfo.warnings && result.sslInfo.warnings.length > 0) score += 10;
   }
 
   // Response time (very slow might indicate issues)

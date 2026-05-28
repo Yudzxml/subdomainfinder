@@ -74,22 +74,22 @@ export function isValidDomain(domain: string): boolean {
   // Remove protocol and path
   const cleanDomain = domain.replace(/^(https?:\/\/)?/, '').split('/')[0];
 
-  // Allow domain with or without TLD (like "webtoons" or "webtoons.com")
-  // Basic domain regex - simplified to allow domains without TLD for scanning
-  const domainRegex = /^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.?)+([a-zA-Z]{2,})?$/;
+  // Domain MUST have at least one dot (TLD required)
+  // Examples: webtoons.com ✅, webtoons.net ✅, webtoons.co.id ✅
+  // Examples: webtoons ❌, localhost ❌, example ❌
+  if (!cleanDomain.includes('.')) {
+    return false;
+  }
 
-  return domainRegex.test(cleanDomain) && cleanDomain.length >= 2;
+  // Basic domain regex with required TLD
+  const domainRegex = /^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)([a-zA-Z]{2,})$/;
+
+  return domainRegex.test(cleanDomain) && cleanDomain.length >= 4;
 }
 
 export function normalizeDomain(domain: string): string {
+  // Remove protocol and path, keep TLD (no auto-add)
   const clean = domain.replace(/^(https?:\/\/)?/, '').split('/')[0].toLowerCase().trim();
-
-  // Auto-detect and add TLD if missing
-  // If domain doesn't have a TLD (like "webtoons"), add .com
-  if (!clean.includes('.')) {
-    return `${clean}.com`;
-  }
-
   return clean;
 }
 

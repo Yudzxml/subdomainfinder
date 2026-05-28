@@ -50,6 +50,16 @@ export default function Home() {
   };
 
   const handleScanStart = async (domain: string) => {
+    // Validate domain format before starting scan
+    const hasDot = domain.includes('.');
+    if (!hasDot) {
+      setShowScanInput(false);
+      setActiveTab('home');
+      // Show error - you could use a toast here
+      alert('Domain must have an extension!\n\nExample: webtoons.com, example.org, test.net');
+      return;
+    }
+
     setShowScanInput(false);
     setActiveTab('scan');
     setScanLogs([]);
@@ -129,7 +139,7 @@ export default function Home() {
               <div className="bg-gray-800/50 border border-gray-700/50 rounded-2xl p-4 mb-4">
                 <input
                   type="text"
-                  placeholder="Enter domain (e.g., webtoons.com)"
+                  placeholder="domain.com (extension required)"
                   autoFocus
                   className="w-full bg-transparent text-white text-lg outline-none placeholder-gray-600"
                 />

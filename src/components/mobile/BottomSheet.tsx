@@ -178,7 +178,7 @@ export function BottomSheet({ subdomain, isOpen, onClose }: BottomSheetProps) {
                 </div>
 
                 {/* Tech Stack */}
-                {subdomain.techStack.length > 0 && (
+                {subdomain.techStack && subdomain.techStack.length > 0 && (
                   <div className="bg-gray-800/30 border border-gray-700/50 rounded-2xl p-4">
                     <h3 className="text-white font-semibold mb-3">Tech Stack</h3>
                     <div className="flex gap-2 flex-wrap">
@@ -201,31 +201,33 @@ export function BottomSheet({ subdomain, isOpen, onClose }: BottomSheetProps) {
                 )}
 
                 {/* DNS Records */}
-                <div className="bg-gray-800/30 border border-gray-700/50 rounded-2xl p-4">
-                  <h3 className="text-white font-semibold mb-3">DNS Records</h3>
-                  <div className="space-y-2">
-                    {Object.entries(subdomain.dnsRecords).map(([type, records]) => (
-                      <div key={type}>
-                        <p className="text-xs text-gray-500 mb-1">{type}</p>
-                        <div className="flex gap-1 flex-wrap">
-                          {Array.isArray(records) && records.length > 0 ? (
-                            records.slice(0, 3).map((record: string, i) => (
-                              <Badge
-                                key={i}
-                                variant="secondary"
-                                className="rounded-full text-xs font-mono"
-                              >
-                                {record}
-                              </Badge>
-                            ))
-                          ) : (
-                            <span className="text-xs text-gray-600">None</span>
-                          )}
+                {subdomain.dnsRecords && Object.keys(subdomain.dnsRecords).length > 0 && (
+                  <div className="bg-gray-800/30 border border-gray-700/50 rounded-2xl p-4">
+                    <h3 className="text-white font-semibold mb-3">DNS Records</h3>
+                    <div className="space-y-2">
+                      {Object.entries(subdomain.dnsRecords).map(([type, records]) => (
+                        <div key={type}>
+                          <p className="text-xs text-gray-500 mb-1">{type}</p>
+                          <div className="flex gap-1 flex-wrap">
+                            {Array.isArray(records) && records.length > 0 ? (
+                              records.slice(0, 3).map((record: string, i) => (
+                                <Badge
+                                  key={i}
+                                  variant="secondary"
+                                  className="rounded-full text-xs font-mono"
+                                >
+                                  {record}
+                                </Badge>
+                              ))
+                            ) : (
+                              <span className="text-xs text-gray-600">None</span>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Action Buttons */}
                 <div className="flex gap-3 pt-2">

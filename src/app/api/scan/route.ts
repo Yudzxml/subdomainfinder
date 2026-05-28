@@ -131,10 +131,18 @@ export async function GET(request: NextRequest) {
     // Validate domain
     if (!isValidDomain(domain)) {
       addLog('validation', `Invalid domain: ${domain}`);
+
+      // Check if domain is missing TLD
+      const hasDot = domain.includes('.');
+      const errorMessage = hasDot
+        ? 'Invalid domain format'
+        : 'Domain must have an extension (e.g., .com, .net, .org)';
+
       return NextResponse.json(
         {
           success: false,
-          message: 'Invalid domain format',
+          message: errorMessage,
+          hint: 'Example: webtoons.com, example.org, test.net',
           scanId,
           logs,
         },

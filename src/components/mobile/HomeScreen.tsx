@@ -60,7 +60,7 @@ export function HomeScreen({ onScanClick }: HomeScreenProps) {
           </div>
           <div className="flex-1">
             <p className="text-white font-medium">Enter domain</p>
-            <p className="text-gray-500 text-xs">e.g., webtoons.com</p>
+            <p className="text-gray-500 text-xs">Required: .com, .net, .org, etc.</p>
           </div>
         </div>
       </motion.div>
