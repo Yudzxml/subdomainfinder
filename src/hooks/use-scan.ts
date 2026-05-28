@@ -9,6 +9,33 @@ interface UseScanReturn {
   error: string | null;
 }
 
+async function ensureSession(): Promise<string | null> {
+  try {
+    const response = await fetch('/api/session', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      if (data.sessionId) {
+        // Store in localStorage as fallback (browser only)
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('session_token', data.sessionId);
+        }
+        return data.sessionId;
+      }
+    }
+    return null;
+  } catch (error) {
+    console.error('Session initialization error:', error);
+    return null;
+  }
+}
+
 export function useScan(): UseScanReturn {
   const [error, setError] = useState<string | null>(null);
 
@@ -42,8 +69,42 @@ export function useScan(): UseScanReturn {
       });
 
       try {
-        // Since we don't have SSE in this setup, we'll use polling for progress
-        const response = await fetch(`/api/scan?domain=${encodeURIComponent(domain)}&includeDNS=true&includeSSL=true&includeHeaders=true`);
+        // Ensure session exists before scanning
+        addScanLog({
+          timestamp: new Date().toISOString(),
+          phase: 'session',
+          message: 'Establishing secure session...',
+        });
+
+        let sessionToken = await ensureSession();
+        if (!sessionToken) {
+          // Try to get from localStorage as fallback (browser only)
+          if (typeof window !== 'undefined') {
+            sessionToken = localStorage.getItem('session_token');
+          }
+        }
+
+        if (!sessionToken) {
+          throw new Error('Failed to establish session. Please try again.');
+        }
+
+        addScanLog({
+          timestamp: new Date().toISOString(),
+          phase: 'session',
+          message: 'Session established successfully',
+        });
+
+        // Perform scan with both credentials and session header
+        const response = await fetch(
+          `/api/scan?domain=${encodeURIComponent(domain)}&includeDNS=true&includeSSL=true&includeHeaders=true`,
+          {
+            credentials: 'include', // Include cookies
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Session-Token': sessionToken, // Also send via header as fallback
+            },
+          }
+        );
 
         if (!response.ok) {
           const errorData = await response.json();

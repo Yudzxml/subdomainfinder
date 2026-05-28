@@ -9,8 +9,8 @@ export async function POST(request: NextRequest) {
     const cookieStore = await cookies();
     cookieStore.set('session', sessionToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      secure: false, // Changed to false for local development
+      sameSite: 'lax', // Changed from strict to lax for better compatibility
       maxAge: 60 * 60 * 24 * 7, // 7 days
       path: '/',
     });
@@ -19,14 +19,17 @@ export async function POST(request: NextRequest) {
       {
         success: true,
         message: 'Session created successfully',
+        sessionId: sessionToken,
       },
       { status: 200 }
     );
   } catch (error) {
+    console.error('Session creation error:', error);
     return NextResponse.json(
       {
         success: false,
         message: 'Failed to create session',
+        error: String(error),
       },
       { status: 500 }
     );

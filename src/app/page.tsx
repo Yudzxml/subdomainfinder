@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Globe, Zap, ShieldCheck, Search, ArrowRight } from 'lucide-react';
 import { useScan } from '@/hooks/use-scan';
@@ -13,12 +13,15 @@ import { BottomSheet } from '@/components/mobile/BottomSheet';
 import { CommandPalette } from '@/components/dashboard/CommandPalette';
 import { useScanStore } from '@/store/scan-store';
 import { SubdomainResult } from '@/types/scan';
+import { useSession } from '@/hooks/use-session';
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState('home');
   const [showScanInput, setShowScanInput] = useState(false);
 
   const { scanDomain, isScanning, progress, phase, error } = useScan();
+  const { sessionInitialized, loading: sessionLoading } = useSession();
+
   const {
     selectedSubdomain,
     setSelectedSubdomain,
@@ -29,6 +32,14 @@ export default function Home() {
     setScanLogs,
     addScanLog,
   } = useScanStore();
+
+  // Initialize session on mount
+  useEffect(() => {
+    if (!sessionLoading && !sessionInitialized) {
+      // Session will be auto-initialized by useSession hook
+      console.log('Session status:', { sessionInitialized, sessionLoading });
+    }
+  }, [sessionInitialized, sessionLoading]);
 
   const handleScanClick = () => {
     if (isScanning) {

@@ -4,6 +4,7 @@ import { verifySession, updateSessionActivity, isValidDomain, normalizeDomain, i
 import { checkAbuse, checkScanAbuse } from '@/lib/anti-abuse';
 import { scanDomain, ScanProgress } from '@/services/scan-service';
 import { scanCache } from '@/lib/cache';
+import crypto from 'crypto';
 
 export const maxDuration = 300; // 5 minutes
 
@@ -22,16 +23,31 @@ export async function GET(request: NextRequest) {
       details,
     };
     logs.push(log);
-    console.log(`[${scanId}] [${phase}] ${message}`);
+    console.log(`[${scanId}] [${phase}] ${message}`, details || '');
   };
 
   try {
-    // Get session cookie
+    // Get session cookie or header
     const cookieStore = await cookies();
-    const sessionCookie = cookieStore.get('session');
+    const allCookies = cookieStore.getAll();
 
-    if (!sessionCookie) {
-      addLog('error', 'No session found');
+    const sessionCookie = cookieStore.get('session');
+    const sessionHeader = request.headers.get('X-Session-Token');
+
+    addLog('debug', `All cookies available:`, allCookies.map(c => c.name));
+    addLog('debug', `Session cookie exists:`, !!sessionCookie);
+    addLog('debug', `Session header exists:`, !!sessionHeader);
+
+    // Try to get session from cookie or header
+    let sessionToken = sessionCookie?.value || sessionHeader;
+
+    if (!sessionToken) {
+      addLog('error', 'No session found', {
+        availableCookies: allCookies.map(c => c.name),
+        cookieCount: allCookies.length,
+        hasSessionCookie: !!sessionCookie,
+        hasSessionHeader: !!sessionHeader
+      });
       return NextResponse.json(
         {
           success: false,
@@ -44,9 +60,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Verify session
-    const session = await verifySession(sessionCookie.value);
+    const session = await verifySession(sessionToken);
     if (!session) {
-      addLog('error', 'Invalid session');
+      addLog('error', 'Invalid session', {
+        tokenLength: sessionToken.length,
+        tokenPrefix: sessionToken.substring(0, 10) + '...'
+      });
       return NextResponse.json(
         {
           success: false,
@@ -168,8 +187,8 @@ export async function GET(request: NextRequest) {
     if (newSessionToken) {
       cookieStore.set('session', newSessionToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
+        secure: false, // Changed to false for local development
+        sameSite: 'lax', // Changed from strict to lax for better compatibility
         maxAge: 60 * 60 * 24 * 7,
         path: '/',
       });

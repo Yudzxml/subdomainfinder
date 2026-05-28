@@ -73,16 +73,16 @@ export function HomeScreen({ onScanClick }: HomeScreenProps) {
         className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide"
       >
         {[
-          { label: 'Fast Scan', icon: Zap, color: 'from-blue-500 to-cyan-500' },
-          { label: 'Deep Scan', icon: TrendingUp, color: 'from-purple-500 to-pink-500' },
-          { label: 'CF Check', icon: ShieldCheck, color: 'from-green-500 to-emerald-500' },
+          { label: 'Fast Scan', icon: Zap, color: 'text-blue-400', bg: 'bg-blue-500/10' },
+          { label: 'Deep Scan', icon: TrendingUp, color: 'text-purple-400', bg: 'bg-purple-500/10' },
+          { label: 'CF Check', icon: ShieldCheck, color: 'text-green-400', bg: 'bg-green-500/10' },
         ].map((action) => (
           <button
             key={action.label}
-            className="flex items-center gap-2 px-4 py-2 bg-gray-800/30 border border-gray-700/50 rounded-full whitespace-nowrap active:scale-95 transition-transform"
+            className="flex items-center gap-2 px-4 py-2 bg-gray-800/50 border border-gray-700/50 rounded-full whitespace-nowrap active:scale-95 transition-transform hover:bg-gray-800/70"
           >
-            <action.icon className={`w-4 h-4 bg-gradient-to-r ${action.color} text-transparent bg-clip-text`} />
-            <span className="text-sm text-gray-400">{action.label}</span>
+            <action.icon className={`w-4 h-4 ${action.color}`} />
+            <span className="text-sm text-white font-medium">{action.label}</span>
           </button>
         ))}
       </motion.div>
