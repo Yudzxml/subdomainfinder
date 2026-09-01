@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react';
+'use client';
+
+import { useState, useEffect, useRef } from 'react';
 
 interface SessionState {
   token: string | null;
@@ -6,47 +8,46 @@ interface SessionState {
   error: string | null;
 }
 
+/**
+ * Initializes a secure session once per app lifetime.
+ * The token is mirrored to localStorage so the scan API can fall back
+ * to the X-Session-Token header in restricted cookie environments.
+ */
 export function useSession() {
-  const [sessionState, setSessionState] = useState<SessionState>({
+  const [state, setState] = useState<SessionState>({
     token: null,
-    loading: false,
+    loading: true,
     error: null,
   });
+  const initializingRef = useRef(false);
 
   const initializeSession = async () => {
-    setSessionState(prev => ({ ...prev, loading: true, error: null }));
+    if (initializingRef.current) return;
+    initializingRef.current = true;
+    setState((prev) => ({ ...prev, loading: true, error: null }));
 
     try {
       const response = await fetch('/api/session', {
         method: 'POST',
         credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
       });
 
       const data = await response.json();
 
       if (response.ok && data.sessionId) {
-        // Store session token in localStorage as fallback (browser only)
         if (typeof window !== 'undefined') {
           localStorage.setItem('session_token', data.sessionId);
         }
-        setSessionState({
-          token: data.sessionId,
-          loading: false,
-          error: null,
-        });
+        setState({ token: data.sessionId, loading: false, error: null });
       } else {
         throw new Error(data.message || 'Failed to initialize session');
       }
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Session initialization failed';
-      setSessionState({
-        token: null,
-        loading: false,
-        error: errorMessage,
-      });
+      const errorMessage =
+        error instanceof Error ? error.message : 'Session initialization failed';
+      setState({ token: null, loading: false, error: errorMessage });
+      initializingRef.current = false; // allow retry
     }
   };
 
@@ -54,29 +55,19 @@ export function useSession() {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('session_token');
     }
+    initializingRef.current = false;
     await initializeSession();
   };
 
-  const getSessionHeaders = (): HeadersInit => {
-    return {
-      'Content-Type': 'application/json',
-      'X-Session-Token': sessionState.token || '',
-    };
-  };
-
   useEffect(() => {
-    // Auto-initialize session if not present
-    if (!sessionState.token) {
-      initializeSession();
-    }
+    initializeSession();
   }, []);
 
   return {
-    token: sessionState.token,
-    loading: sessionState.loading,
-    error: sessionState.error,
-    initialized: !!sessionState.token,
+    token: state.token,
+    loading: state.loading,
+    error: state.error,
+    initialized: !!state.token,
     refreshSession,
-    getSessionHeaders,
   };
 }

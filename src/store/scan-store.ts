@@ -1,5 +1,11 @@
 import { create } from 'zustand';
-import { SubdomainResult, ScanStats, FilterOptions, ViewMode, ScanLog, ScanProgress } from '@/types/scan';
+import { SubdomainResult, ScanStats, FilterOptions, ViewMode, ScanLog } from '@/types/scan';
+
+export interface RecentScanEntry {
+  domain: string;
+  scannedAt: number; // epoch ms
+  totalFound: number;
+}
 
 interface ScanState {
   // Scan data
@@ -7,51 +13,106 @@ interface ScanState {
   subdomains: SubdomainResult[];
   stats: ScanStats | null;
   filteredSubdomains: SubdomainResult[];
+  scanDurationMs: number;
+  fromCache: boolean;
 
   // Scan state
   isScanning: boolean;
   scanProgress: number;
   scanPhase: string;
-  scanDuration: number;
   scanLogs: ScanLog[];
+  scanError: string | null;
 
-  // Filters
+  // Filters & search
   filters: FilterOptions;
   searchQuery: string;
 
   // UI state
-  viewMode: ViewMode;
+  activeTab: 'home' | 'scan' | 'results' | 'history' | 'settings';
+  viewMode: 'list' | 'grid';
   selectedSubdomain: SubdomainResult | null;
   isDetailOpen: boolean;
+  isFilterOpen: boolean;
+  isScanModalOpen: boolean;
   isCommandPaletteOpen: boolean;
 
-  // History & favorites
-  recentScans: string[];
+  // History & favorites (persisted)
+  recentScans: RecentScanEntry[];
   favoriteDomains: string[];
 
-  // Actions
+  // Actions — data
   setDomain: (domain: string) => void;
   setSubdomains: (subdomains: SubdomainResult[]) => void;
   setStats: (stats: ScanStats) => void;
+  setScanMeta: (durationMs: number, fromCache: boolean) => void;
+
+  // Actions — scan lifecycle
   setIsScanning: (isScanning: boolean) => void;
   setScanProgress: (progress: number) => void;
   setScanPhase: (phase: string) => void;
-  setScanDuration: (duration: number) => void;
   setScanLogs: (logs: ScanLog[]) => void;
   addScanLog: (log: ScanLog) => void;
+  setScanError: (error: string | null) => void;
+  resetScan: () => void;
+
+  // Actions — filters
   setFilters: (filters: FilterOptions) => void;
+  clearFilters: () => void;
   setSearchQuery: (query: string) => void;
-  setViewMode: (mode: ViewMode) => void;
+  applyFilters: () => void;
+
+  // Actions — UI
+  setActiveTab: (tab: ScanState['activeTab']) => void;
+  setViewMode: (mode: ScanState['viewMode']) => void;
   setSelectedSubdomain: (subdomain: SubdomainResult | null) => void;
   setIsDetailOpen: (isOpen: boolean) => void;
+  setIsFilterOpen: (isOpen: boolean) => void;
+  setScanModalOpen: (isOpen: boolean) => void;
   setCommandPaletteOpen: (isOpen: boolean) => void;
-  resetScan: () => void;
-  applyFilters: () => void;
+
+  // Actions — export & persistence
   exportData: (format: 'json' | 'csv' | 'txt') => void;
   addToFavorites: (domain: string) => void;
   removeFromFavorites: (domain: string) => void;
-  addToRecent: (domain: string) => void;
+  toggleFavorite: (domain: string) => boolean;
+  addToRecent: (entry: RecentScanEntry) => void;
+  removeRecent: (domain: string) => void;
   clearRecent: () => void;
+  clearAllData: () => void;
+
+  // Helpers
+  getActiveFilterCount: () => number;
+}
+
+const FAVORITES_KEY = 'subscan.favorites';
+const RECENT_KEY = 'subscan.recent';
+
+function persist(key: string, value: unknown) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // storage full or unavailable — ignore
+  }
+}
+
+function readPersisted<T>(key: string, fallback: T): T {
+  if (typeof window === 'undefined') return fallback;
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+/** Escape a value for safe CSV output (handles quotes, commas, newlines). */
+function csvEscape(value: unknown): string {
+  const str = String(value ?? '');
+  if (/[",\n\r]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
 }
 
 export const useScanStore = create<ScanState>((set, get) => ({
@@ -60,21 +121,26 @@ export const useScanStore = create<ScanState>((set, get) => ({
   subdomains: [],
   stats: null,
   filteredSubdomains: [],
+  scanDurationMs: 0,
+  fromCache: false,
   isScanning: false,
   scanProgress: 0,
   scanPhase: '',
-  scanDuration: 0,
   scanLogs: [],
+  scanError: null,
   filters: {},
   searchQuery: '',
+  activeTab: 'home',
   viewMode: 'list',
   selectedSubdomain: null,
   isDetailOpen: false,
+  isFilterOpen: false,
+  isScanModalOpen: false,
   isCommandPaletteOpen: false,
   recentScans: [],
   favoriteDomains: [],
 
-  // Actions
+  // Data setters
   setDomain: (domain) => set({ domain }),
 
   setSubdomains: (subdomains) => {
@@ -84,35 +150,15 @@ export const useScanStore = create<ScanState>((set, get) => ({
 
   setStats: (stats) => set({ stats }),
 
+  setScanMeta: (durationMs, fromCache) => set({ scanDurationMs: durationMs, fromCache }),
+
+  // Scan lifecycle
   setIsScanning: (isScanning) => set({ isScanning }),
-
   setScanProgress: (progress) => set({ scanProgress: progress }),
-
   setScanPhase: (phase) => set({ scanPhase: phase }),
-
-  setScanDuration: (duration) => set({ scanDuration: duration }),
-
   setScanLogs: (logs) => set({ scanLogs: logs }),
-
   addScanLog: (log) => set((state) => ({ scanLogs: [...state.scanLogs, log] })),
-
-  setFilters: (filters) => {
-    set({ filters });
-    get().applyFilters();
-  },
-
-  setSearchQuery: (query) => {
-    set({ searchQuery: query });
-    get().applyFilters();
-  },
-
-  setViewMode: (mode) => set({ viewMode: mode }),
-
-  setSelectedSubdomain: (subdomain) => set({ selectedSubdomain: subdomain }),
-
-  setIsDetailOpen: (isOpen) => set({ isDetailOpen: isOpen }),
-
-  setCommandPaletteOpen: (isOpen) => set({ isCommandPaletteOpen: isOpen }),
+  setScanError: (error) => set({ scanError: error }),
 
   resetScan: () =>
     set({
@@ -123,49 +169,57 @@ export const useScanStore = create<ScanState>((set, get) => ({
       isScanning: false,
       scanProgress: 0,
       scanPhase: '',
-      scanDuration: 0,
       scanLogs: [],
+      scanError: null,
+      scanDurationMs: 0,
+      fromCache: false,
       selectedSubdomain: null,
       isDetailOpen: false,
       filters: {},
       searchQuery: '',
     }),
 
+  // Filters
+  setFilters: (filters) => {
+    set({ filters });
+    get().applyFilters();
+  },
+
+  clearFilters: () => {
+    set({ filters: {}, searchQuery: '' });
+    get().applyFilters();
+  },
+
+  setSearchQuery: (query) => {
+    set({ searchQuery: query });
+    get().applyFilters();
+  },
+
   applyFilters: () => {
     const { subdomains, filters, searchQuery } = get();
     let filtered = [...subdomains];
 
-    // Apply search query
-    if (searchQuery) {
-      const query = searchQuery.toLowerCase();
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
       filtered = filtered.filter(
         (s) =>
-          s.subdomain.toLowerCase().includes(query) ||
-          s.title.toLowerCase().includes(query) ||
-          s.ipAddress.toLowerCase().includes(query) ||
-          s.techStack.some(t => t.toLowerCase().includes(query))
+          s.subdomain.toLowerCase().includes(q) ||
+          s.title.toLowerCase().includes(q) ||
+          s.ipAddress.toLowerCase().includes(q) ||
+          s.techStack.some((t) => t.toLowerCase().includes(q))
       );
-    }
-
-    // Apply filters
-    if (filters.cloudflare !== undefined) {
-      filtered = filtered.filter((s) => s.cloudflare === filters.cloudflare);
     }
 
     if (filters.alive !== undefined) {
       filtered = filtered.filter((s) => s.alive === filters.alive);
     }
 
-    if (filters.dead !== undefined) {
-      filtered = filtered.filter((s) => !s.alive === filters.dead);
+    if (filters.cloudflare !== undefined) {
+      filtered = filtered.filter((s) => s.cloudflare === filters.cloudflare);
     }
 
     if (filters.status200) {
       filtered = filtered.filter((s) => s.status === 200);
-    }
-
-    if (filters.riskLevel) {
-      filtered = filtered.filter((s) => s.riskLevel === filters.riskLevel);
     }
 
     if (filters.highRisk) {
@@ -173,10 +227,13 @@ export const useScanStore = create<ScanState>((set, get) => ({
     }
 
     if (filters.adminPortal) {
-      filtered = filtered.filter(
-        (s) =>
-          /admin|login|portal|dashboard|cpanel|webmail/i.test(s.subdomain)
+      filtered = filtered.filter((s) =>
+        /admin|login|portal|dashboard|cpanel|webmail/i.test(s.subdomain)
       );
+    }
+
+    if (filters.riskLevel) {
+      filtered = filtered.filter((s) => s.riskLevel === filters.riskLevel);
     }
 
     if (filters.waf) {
@@ -190,61 +247,53 @@ export const useScanStore = create<ScanState>((set, get) => ({
     set({ filteredSubdomains: filtered });
   },
 
+  // UI
+  setActiveTab: (tab) => set({ activeTab: tab }),
+  setViewMode: (mode) => set({ viewMode: mode }),
+  setSelectedSubdomain: (subdomain) => set({ selectedSubdomain: subdomain }),
+  setIsDetailOpen: (isOpen) => set({ isDetailOpen: isOpen }),
+  setIsFilterOpen: (isOpen) => set({ isFilterOpen: isOpen }),
+  setScanModalOpen: (isOpen) => set({ isScanModalOpen: isOpen }),
+  setCommandPaletteOpen: (isOpen) => set({ isCommandPaletteOpen: isOpen }),
+
+  // Export
   exportData: (format) => {
-    const { filteredSubdomains } = get();
+    const { filteredSubdomains, domain } = get();
+    if (filteredSubdomains.length === 0) return;
+
     let content = '';
-    let filename = '';
     let mimeType = '';
+    const suffix = domain ? domain.replace(/[^a-z0-9.-]/gi, '_') : 'scan';
+    let filename = `subscan-${suffix}`;
 
     switch (format) {
       case 'json':
         content = JSON.stringify(filteredSubdomains, null, 2);
-        filename = 'subdomains.json';
         mimeType = 'application/json';
+        filename += '.json';
         break;
-      case 'csv':
+      case 'csv': {
         const headers = [
-          'Subdomain',
-          'Status',
-          'Alive',
-          'Response Time',
-          'Title',
-          'IP Address',
-          'Server',
-          'Cloudflare',
-          'WAF',
-          'Country',
-          'Risk Score',
-          'Risk Level',
-          'SSL',
-          'Tech Stack',
+          'Subdomain', 'Status', 'Alive', 'Response Time (ms)', 'Title', 'IP Address',
+          'Server', 'Cloudflare', 'WAF', 'Country', 'Risk Score', 'Risk Level',
+          'SSL', 'Tech Stack',
         ];
         const rows = filteredSubdomains.map((s) =>
           [
-            s.subdomain,
-            s.status,
-            s.alive,
-            s.responseTime,
-            `"${s.title}"`,
-            s.ipAddress,
-            s.server,
-            s.cloudflare,
-            s.waf.join(';'),
-            s.country,
-            s.riskScore,
-            s.riskLevel,
-            s.ssl,
-            s.techStack.join(';'),
-          ].join(',')
+            s.subdomain, s.status, s.alive, s.responseTime, s.title, s.ipAddress,
+            s.server, s.cloudflare, s.waf.join('; '), s.country, s.riskScore,
+            s.riskLevel, s.ssl, s.techStack.join('; '),
+          ].map(csvEscape).join(',')
         );
         content = [headers.join(','), ...rows].join('\n');
-        filename = 'subdomains.csv';
         mimeType = 'text/csv';
+        filename += '.csv';
         break;
+      }
       case 'txt':
         content = filteredSubdomains.map((s) => s.subdomain).join('\n');
-        filename = 'subdomains.txt';
         mimeType = 'text/plain';
+        filename += '.txt';
         break;
     }
 
@@ -253,55 +302,90 @@ export const useScanStore = create<ScanState>((set, get) => ({
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
+    document.body.appendChild(a);
     a.click();
+    a.remove();
     URL.revokeObjectURL(url);
   },
 
+  // Persistence
   addToFavorites: (domain) => {
-    set((state) => ({
-      favoriteDomains: state.favoriteDomains.includes(domain)
-        ? state.favoriteDomains
-        : [...state.favoriteDomains, domain],
-    }));
-
-    // Save to localStorage
-    const favorites = get().favoriteDomains;
-    localStorage.setItem('favorites', JSON.stringify(favorites));
+    set((state) => {
+      if (state.favoriteDomains.includes(domain)) return state;
+      const favorites = [...state.favoriteDomains, domain];
+      persist(FAVORITES_KEY, favorites);
+      return { favoriteDomains: favorites };
+    });
   },
 
   removeFromFavorites: (domain) => {
-    set((state) => ({
-      favoriteDomains: state.favoriteDomains.filter((d) => d !== domain),
-    }));
-
-    const favorites = get().favoriteDomains;
-    localStorage.setItem('favorites', JSON.stringify(favorites));
+    set((state) => {
+      const favorites = state.favoriteDomains.filter((d) => d !== domain);
+      persist(FAVORITES_KEY, favorites);
+      return { favoriteDomains: favorites };
+    });
   },
 
-  addToRecent: (domain) => {
+  toggleFavorite: (domain) => {
+    const { favoriteDomains, addToFavorites, removeFromFavorites } = get();
+    const isFav = favoriteDomains.includes(domain);
+    if (isFav) removeFromFavorites(domain);
+    else addToFavorites(domain);
+    return !isFav;
+  },
+
+  addToRecent: (entry) => {
     set((state) => {
-      const recent = [domain, ...state.recentScans.filter((d) => d !== domain)].slice(0, 10);
-      localStorage.setItem('recentScans', JSON.stringify(recent));
+      const recent = [
+        entry,
+        ...state.recentScans.filter((r) => r.domain !== entry.domain),
+      ].slice(0, 20);
+      persist(RECENT_KEY, recent);
+      return { recentScans: recent };
+    });
+  },
+
+  removeRecent: (domain) => {
+    set((state) => {
+      const recent = state.recentScans.filter((r) => r.domain !== domain);
+      persist(RECENT_KEY, recent);
       return { recentScans: recent };
     });
   },
 
   clearRecent: () => {
     set({ recentScans: [] });
-    localStorage.removeItem('recentScans');
+    if (typeof window !== 'undefined') localStorage.removeItem(RECENT_KEY);
+  },
+
+  clearAllData: () => {
+    set({ recentScans: [], favoriteDomains: [] });
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(RECENT_KEY);
+      localStorage.removeItem(FAVORITES_KEY);
+    }
+  },
+
+  getActiveFilterCount: () => {
+    const { filters, searchQuery } = get();
+    let count = 0;
+    if (filters.alive !== undefined) count++;
+    if (filters.cloudflare !== undefined) count++;
+    if (filters.status200) count++;
+    if (filters.highRisk) count++;
+    if (filters.adminPortal) count++;
+    if (filters.riskLevel) count++;
+    if (filters.waf) count++;
+    if (filters.sslValid !== undefined) count++;
+    if (searchQuery.trim()) count++;
+    return count;
   },
 }));
 
-// Initialize from localStorage
+// Hydrate persisted state on the client
 if (typeof window !== 'undefined') {
-  const favorites = localStorage.getItem('favorites');
-  const recent = localStorage.getItem('recentScans');
-
-  if (favorites) {
-    useScanStore.setState({ favoriteDomains: JSON.parse(favorites) });
-  }
-
-  if (recent) {
-    useScanStore.setState({ recentScans: JSON.parse(recent) });
-  }
+  useScanStore.setState({
+    favoriteDomains: readPersisted<string[]>(FAVORITES_KEY, []),
+    recentScans: readPersisted<RecentScanEntry[]>(RECENT_KEY, []),
+  });
 }

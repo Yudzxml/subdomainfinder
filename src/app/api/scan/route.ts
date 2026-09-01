@@ -15,39 +15,23 @@ export async function GET(request: NextRequest) {
   const logs: any[] = [];
 
   const addLog = (phase: string, message: string, details?: any) => {
-    const log = {
+    logs.push({
       timestamp: new Date().toISOString(),
       scanId,
       phase,
       message,
       details,
-    };
-    logs.push(log);
-    console.log(`[${scanId}] [${phase}] ${message}`, details || '');
+    });
   };
 
   try {
-    // Get session cookie or header
+    // Get session from cookie or header (header is fallback for restricted cookie environments)
     const cookieStore = await cookies();
-    const allCookies = cookieStore.getAll();
-
     const sessionCookie = cookieStore.get('session');
     const sessionHeader = request.headers.get('X-Session-Token');
-
-    addLog('debug', `All cookies available:`, allCookies.map(c => c.name));
-    addLog('debug', `Session cookie exists:`, !!sessionCookie);
-    addLog('debug', `Session header exists:`, !!sessionHeader);
-
-    // Try to get session from cookie or header
-    let sessionToken = sessionCookie?.value || sessionHeader;
+    const sessionToken = sessionCookie?.value || sessionHeader;
 
     if (!sessionToken) {
-      addLog('error', 'No session found', {
-        availableCookies: allCookies.map(c => c.name),
-        cookieCount: allCookies.length,
-        hasSessionCookie: !!sessionCookie,
-        hasSessionHeader: !!sessionHeader
-      });
       return NextResponse.json(
         {
           success: false,
@@ -62,10 +46,6 @@ export async function GET(request: NextRequest) {
     // Verify session
     const session = await verifySession(sessionToken);
     if (!session) {
-      addLog('error', 'Invalid session', {
-        tokenLength: sessionToken.length,
-        tokenPrefix: sessionToken.substring(0, 10) + '...'
-      });
       return NextResponse.json(
         {
           success: false,
@@ -76,8 +56,6 @@ export async function GET(request: NextRequest) {
         { status: 401 }
       );
     }
-
-    addLog('session', `Session verified: ${session.sessionId}`);
 
     // Check abuse
     const abuseCheck = checkAbuse(request, session.sessionId);
@@ -116,7 +94,6 @@ export async function GET(request: NextRequest) {
     const domain = searchParams.get('domain');
 
     if (!domain) {
-      addLog('validation', 'No domain provided');
       return NextResponse.json(
         {
           success: false,
@@ -130,9 +107,6 @@ export async function GET(request: NextRequest) {
 
     // Validate domain
     if (!isValidDomain(domain)) {
-      addLog('validation', `Invalid domain: ${domain}`);
-
-      // Check if domain is missing TLD
       const hasDot = domain.includes('.');
       const errorMessage = hasDot
         ? 'Invalid domain format'
@@ -190,13 +164,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Update session activity
-    const newSessionToken = await updateSessionActivity(sessionCookie.value);
+    // Update session activity — FIX: use sessionToken (works for both cookie & header),
+    // previous code used sessionCookie.value which crashed when session came via header
+    const newSessionToken = await updateSessionActivity(sessionToken);
     if (newSessionToken) {
       cookieStore.set('session', newSessionToken, {
         httpOnly: true,
-        secure: false, // Changed to false for local development
-        sameSite: 'lax', // Changed from strict to lax for better compatibility
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
         maxAge: 60 * 60 * 24 * 7,
         path: '/',
       });
@@ -210,7 +185,6 @@ export async function GET(request: NextRequest) {
         addLog(progress.phase, `${progress.current} (${progress.progress}%)`, {
           progress: progress.progress,
           total: progress.total,
-          logsCount: progress.logs.length,
         });
       },
       includeDNS: searchParams.get('includeDNS') !== 'false',
@@ -222,9 +196,8 @@ export async function GET(request: NextRequest) {
     });
 
     const duration = Date.now() - startTime;
-    addLog('scan', `Scan completed in ${duration}ms`, {
+    addLog('scan', `Scan completed in ${(duration / 1000).toFixed(1)}s`, {
       subdomainsCount: scanResults.subdomains.length,
-      stats: scanResults.stats,
     });
 
     // Cache results
@@ -252,9 +225,7 @@ export async function GET(request: NextRequest) {
       { status: 200 }
     );
   } catch (error: any) {
-    addLog('error', `Scan failed: ${error.message}`, {
-      stack: error.stack,
-    });
+    addLog('error', `Scan failed: ${error.message}`);
 
     return NextResponse.json(
       {

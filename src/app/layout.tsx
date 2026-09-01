@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
@@ -15,23 +15,40 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Subdomain Intelligence - Cloudflare Security Scanner",
-  description: "Advanced subdomain enumeration and Cloudflare detection tool with multi-source scanning capabilities.",
-  keywords: ["subdomain", "Cloudflare", "security", "scanner", "WAF", "cybersecurity", "domain enumeration"],
-  authors: [{ name: "Security Team" }],
-  icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
-  },
+  title: "SubScan — Subdomain Intelligence Scanner",
+  description:
+    "Advanced subdomain enumeration and security analysis tool. Multi-source scanning, Cloudflare & WAF detection, SSL intelligence, and risk scoring — all in one dashboard.",
+  keywords: [
+    "subdomain finder",
+    "subdomain enumeration",
+    "reconnaissance",
+    "cybersecurity",
+    "WAF detection",
+    "Cloudflare detection",
+    "security scanner",
+    "bug bounty",
+  ],
+  authors: [{ name: "Yudzxml" }],
+  creator: "Yudzxml",
   openGraph: {
-    title: "Subdomain Intelligence Scanner",
-    description: "Advanced cybersecurity tool for subdomain enumeration and Cloudflare detection",
+    title: "SubScan — Subdomain Intelligence Scanner",
+    description:
+      "Advanced cybersecurity tool for subdomain enumeration and security analysis",
     type: "website",
   },
   twitter: {
     card: "summary_large_image",
-    title: "Subdomain Intelligence Scanner",
-    description: "Advanced cybersecurity tool for subdomain enumeration and Cloudflare detection",
+    title: "SubScan — Subdomain Intelligence Scanner",
+    description:
+      "Advanced cybersecurity tool for subdomain enumeration and security analysis",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0c0f14",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
 };
 
 export default function RootLayout({
@@ -40,7 +57,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning className="dark">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >

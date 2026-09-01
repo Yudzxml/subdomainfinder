@@ -75,14 +75,14 @@ export function isValidDomain(domain: string): boolean {
   const cleanDomain = domain.replace(/^(https?:\/\/)?/, '').split('/')[0];
 
   // Domain MUST have at least one dot (TLD required)
-  // Examples: webtoons.com ✅, webtoons.net ✅, webtoons.co.id ✅
+  // Examples: webtoons.com ✅, webtoons.net ✅, webtoons.co.id ✅, yydz.biz.id ✅
   // Examples: webtoons ❌, localhost ❌, example ❌
   if (!cleanDomain.includes('.')) {
     return false;
   }
 
-  // Basic domain regex with required TLD
-  const domainRegex = /^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)([a-zA-Z]{2,})$/;
+  // One or more labels, ending with an alphabetic TLD (supports multi-level: co.id, biz.id, com.br…)
+  const domainRegex = /^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
 
   return domainRegex.test(cleanDomain) && cleanDomain.length >= 4;
 }
